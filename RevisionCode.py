@@ -1,4 +1,4 @@
-
+from models.topic import Topic
 import sys
 from datetime import datetime
 
@@ -257,13 +257,11 @@ class AddTopicDialog(QDialog):
         self.accept()
 
     def get_topic_data(self):
-        return {
-            "name": self.name_input.text().strip(),
-            "category": self.category_input.currentText().strip(),
-            "confidence": self.confidence_input.value(),
-            "sessions": [],
-            "created": datetime.now().strftime("%d %b %Y"),
-        }
+        name = self.name_input.text().strip()
+        category = self.category_input.currentText()
+        confidence = self.confidence_input.value()
+
+        return Topic(name, category, confidence)
 
 
 class RevisionApp(QMainWindow):
@@ -625,35 +623,31 @@ class RevisionApp(QMainWindow):
 
         self.refresh_ui()
 
+    
+    
     def add_topic(self):
         dialog = AddTopicDialog(self)
 
-        if dialog.exec() != QDialog.DialogCode.Accepted:
-            return
+        if dialog.exec():
+            topic = dialog.get_topic_data()
 
-        topic = dialog.get_topic_data()
+            for existing_topic in self.topics:
+                if existing_topic.name.casefold() == topic.name.casefold():
+                    QMessageBox.warning(
+                        self,
+                        "Duplicate Topic",
+                        "A topic with this name already exists."
+                    )
+                    return
 
-        duplicate = any(
-            existing["name"].casefold() == topic["name"].casefold()
-            for existing in self.topics
-        )
+            self.topics.append(topic)
+            self.refresh_ui()
 
-        if duplicate:
-            QMessageBox.warning(
+            QMessageBox.information(
                 self,
-                "Topic already exists",
-                "You've already created a topic with that name.",
+                "Topic Created",
+                f'"{topic.name}" has been added to your topics.'
             )
-            return
-
-        self.topics.append(topic)
-        self.refresh_ui()
-
-        QMessageBox.information(
-            self,
-            "Topic created",
-            f'"{topic["name"]}" has been added to your topics.',
-        )
 
     def delete_topic(self):
         selected_row = self.topic_table.currentRow()
@@ -661,20 +655,17 @@ class RevisionApp(QMainWindow):
         if selected_row < 0:
             QMessageBox.information(
                 self,
-                "No topic selected",
-                "Select a topic from the table first.",
+                "No Topic Selected",
+                "Please select a topic to delete."
             )
             return
 
-        topic_name = self.topics[selected_row]["name"]
+        topic = self.topics[selected_row]
 
         answer = QMessageBox.question(
             self,
-            "Delete topic",
-            f'Delete "{topic_name}" and its recorded sessions?',
-            QMessageBox.StandardButton.Yes
-            | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No,
+            "Delete Topic",
+            f"Are you sure you want to delete '{topic.name}'?"
         )
 
         if answer == QMessageBox.StandardButton.Yes:
@@ -685,13 +676,14 @@ class RevisionApp(QMainWindow):
         total_topics = len(self.topics)
 
         total_sessions = sum(
-            len(topic["sessions"]) for topic in self.topics
+            topic.get_session_count() for topic in self.topics
         )
 
         if total_topics:
             average_confidence = sum(
-                topic["confidence"] for topic in self.topics
+                topic.confidence for topic in self.topics
             ) / total_topics
+
             self.confidence_label.setText(
                 f"{average_confidence:.1f}/5"
             )
@@ -704,10 +696,10 @@ class RevisionApp(QMainWindow):
         self.topic_table.setRowCount(total_topics)
 
         for row, topic in enumerate(self.topics):
-            name_item = QTableWidgetItem(topic["name"])
-            category_item = QTableWidgetItem(topic["category"])
+            name_item = QTableWidgetItem(topic.name)
+            category_item = QTableWidgetItem(topic.category)
             confidence_item = QTableWidgetItem(
-                f'{topic["confidence"]}/5'
+                f"{topic.confidence}/5"
             )
 
             confidence_item.setTextAlignment(
@@ -729,11 +721,10 @@ class RevisionApp(QMainWindow):
             lines = []
 
             for topic in self.topics[:5]:
-                confidence = topic["confidence"]
                 lines.append(
-                    f'•  {topic["name"]}  —  '
-                    f'{topic["category"]}  —  '
-                    f'Confidence {confidence}/5'
+                    f"•  {topic.name}  —  "
+                    f"{topic.category}  —  "
+                    f"Confidence {topic.confidence}/5"
                 )
 
             if total_topics > 5:
@@ -758,7 +749,7 @@ class RevisionApp(QMainWindow):
         if total_topics:
             lowest = min(
                 self.topics,
-                key=lambda topic: topic["confidence"]
+                key=lambda topic: topic.confidence
             )
 
             self.statistics_message.setText(
@@ -766,8 +757,8 @@ class RevisionApp(QMainWindow):
                 f"Sessions recorded: {total_sessions}\n\n"
                 f"Average confidence: "
                 f"{self.confidence_label.text()}\n\n"
-                f"Lowest-confidence topic: {lowest['name']} "
-                f"({lowest['confidence']}/5)\n\n"
+                f"Lowest-confidence topic: {lowest.name} "
+                f"({lowest.confidence}/5)\n\n"
                 "These figures will become more informative "
                 "when revision results and history are available."
             )
