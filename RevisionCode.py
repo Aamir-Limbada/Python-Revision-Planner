@@ -1,4 +1,5 @@
 from models.topic import Topic
+from models.database import Database
 import sys
 from datetime import datetime
 
@@ -273,7 +274,8 @@ class RevisionApp(QMainWindow):
         self.resize(1200, 760)
 
         # Temporary storage. SQLite will replace this later.
-        self.topics = []
+        self.database = Database()
+        self.topics = self.database.get_topics()
         self.current_page = 0
 
         self.setStyleSheet(APP_STYLE)
@@ -640,7 +642,16 @@ class RevisionApp(QMainWindow):
                     )
                     return
 
-            self.topics.append(topic)
+            try:
+                self.database.add_topic(topic)
+                self.topics.append(topic)
+            except Exception as error:
+                QMessageBox.warning(
+                    self,
+                    "Could Not Save Topic",
+                    f"Something went wrong while saving:\n{error}",
+                )
+                return
             self.refresh_ui()
 
             QMessageBox.information(
@@ -669,8 +680,16 @@ class RevisionApp(QMainWindow):
         )
 
         if answer == QMessageBox.StandardButton.Yes:
-            self.topics.pop(selected_row)
-            self.refresh_ui()
+            try:
+                self.database.delete_topic(topic.name)
+                self.topics.pop(selected_row)
+                self.refresh_ui()
+            except Exception as error:
+                QMessageBox.warning(
+                    self,
+                    "Could Not Delete Topic",
+                    f"Something went wrong:\n{error}",
+                )
 
     def refresh_ui(self):
         total_topics = len(self.topics)
