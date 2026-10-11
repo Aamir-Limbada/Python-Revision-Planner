@@ -63,6 +63,7 @@ class Database:
             ).fetchall()
 
         
+        
         topics = []
 
         for topic_id, name, category, confidence, created in rows:
@@ -72,18 +73,64 @@ class Database:
                 confidence,
                 topic_id=topic_id,
             )
+
             topic.created = datetime.fromisoformat(created)
+            topic.sessions = self.get_sessions_for_topic(topic.id)
+
             topics.append(topic)
 
         return topics
 
 
-    def delete_topic(self, topic_name):
+
+    
+    def add_session(self, topic, session):
+        if topic.id is None:
+            raise ValueError("The topic must be saved before logging a session.")
+
         with self.connect() as connection:
             connection.execute(
-                "DELETE FROM topics WHERE name = ?",
-                (topic_name,),
+                """
+                INSERT INTO sessions (
+                    topic_id, date, attempted, correct, confidence
+                )
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (
+                    topic.id,
+                    session["date"].isoformat(),
+                    session["attempted"],
+                    session["correct"],
+                    session["confidence"],
+                ),
             )
+    
+    def get_sessions_for_topic(self, topic_id):
+        from datetime import datetime
+
+        with self.connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT date, attempted, correct, confidence
+                FROM sessions
+                WHERE topic_id = ?
+                ORDER BY date DESC
+                """,
+                (topic_id,),
+            ).fetchall()
+
+        sessions = []
+
+        for date, attempted, correct, confidence in rows:
+            sessions.append({
+                "date": datetime.fromisoformat(date),
+                "attempted": attempted,
+                "correct": correct,
+                "confidence": confidence,
+            })
+
+        return sessions
+
 
     
     def create_session_table(self):
