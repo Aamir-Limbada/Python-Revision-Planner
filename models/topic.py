@@ -2,12 +2,15 @@ from datetime import datetime
 
 
 class Topic:
-    def __init__(self, name, category, confidence=3):
+    
+    def __init__(self, name, category, confidence=3, topic_id=None):
+        self.id = topic_id
         self.name = name
         self.category = category
         self.confidence = confidence
         self.sessions = []
         self.created = datetime.now()
+
 
     def update_confidence(self, new_confidence):
         if not 1 <= new_confidence <= 5:
