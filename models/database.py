@@ -112,6 +112,40 @@ class Database:
                 (session["confidence"], topic.id),
             )
     
+    def get_all_sessions(self):
+        from datetime import datetime
+
+        with self.connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT
+                    sessions.id,
+                    topics.name,
+                    sessions.date,
+                    sessions.attempted,
+                    sessions.correct,
+                    sessions.confidence
+                FROM sessions
+                JOIN topics
+                    ON sessions.topic_id = topics.id
+                ORDER BY sessions.date DESC, sessions.id DESC
+                """
+            ).fetchall()
+
+        sessions = []
+
+        for row in rows:
+            sessions.append({
+                "id": row[0],
+                "topic_name": row[1],
+                "date": datetime.fromisoformat(row[2]),
+                "attempted": row[3],
+                "correct": row[4],
+                "confidence": row[5],
+            })
+
+        return sessions
+
     
     def get_sessions_for_topic(self, topic_id):
         from datetime import datetime
