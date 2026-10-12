@@ -84,10 +84,8 @@ class Database:
 
 
     
+    
     def add_session(self, topic, session):
-        if topic.id is None:
-            raise ValueError("The topic must be saved before logging a session.")
-
         with self.connect() as connection:
             connection.execute(
                 """
@@ -104,6 +102,16 @@ class Database:
                     session["confidence"],
                 ),
             )
+
+            connection.execute(
+                """
+                UPDATE topics
+                SET confidence = ?
+                WHERE id = ?
+                """,
+                (session["confidence"], topic.id),
+            )
+    
     
     def get_sessions_for_topic(self, topic_id):
         from datetime import datetime

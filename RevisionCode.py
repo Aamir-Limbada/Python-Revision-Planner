@@ -1,3 +1,4 @@
+import sqlite3
 from models.topic import Topic
 from models.database import Database
 import sys
@@ -11,6 +12,7 @@ from PySide6.QtWidgets import (
     QDialog,
     QVBoxLayout,
     QHBoxLayout,
+    QDialogButtonBox,
     QFormLayout,
     QLabel,
     QPushButton,
@@ -354,6 +356,83 @@ class AddTopicDialog(QDialog):
         return Topic(name, category, confidence)
 
 
+
+class SessionDialog(QDialog):
+    def __init__(self, topics, parent=None):
+        super().__init__(parent)
+
+        self.topics = topics
+
+        self.setWindowTitle("Log Revision Session")
+        self.setMinimumWidth(400)
+
+        layout = QVBoxLayout(self)
+        form = QFormLayout()
+
+        self.topic_input = QComboBox()
+
+        for topic in topics:
+            self.topic_input.addItem(
+                f"{topic.name} ({topic.category})"
+            )
+
+        self.attempted_input = QSpinBox()
+        self.attempted_input.setRange(1, 10000)
+        self.attempted_input.setValue(10)
+
+        self.correct_input = QSpinBox()
+        self.correct_input.setRange(0, 10000)
+        self.correct_input.setValue(7)
+
+        self.confidence_input = QSpinBox()
+        self.confidence_input.setRange(1, 5)
+        self.confidence_input.setValue(3)
+        self.confidence_input.setSuffix(" / 5")
+
+        form.addRow("Topic", self.topic_input)
+        form.addRow("Questions attempted", self.attempted_input)
+        form.addRow("Answers correct", self.correct_input)
+        form.addRow("Confidence afterwards", self.confidence_input)
+
+        layout.addLayout(form)
+
+        self.error_label = QLabel("")
+        self.error_label.setWordWrap(True)
+        self.error_label.setStyleSheet("color: #FF8A80;")
+        layout.addWidget(self.error_label)
+
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Save
+            | QDialogButtonBox.StandardButton.Cancel
+        )
+
+        buttons.accepted.connect(self.validate_and_accept)
+        buttons.rejected.connect(self.reject)
+
+        layout.addWidget(buttons)
+
+    def validate_and_accept(self):
+        attempted = self.attempted_input.value()
+        correct = self.correct_input.value()
+
+        if correct > attempted:
+            self.error_label.setText(
+                "Correct answers cannot exceed questions attempted."
+            )
+            return
+
+        self.accept()
+
+    def get_session_data(self):
+        topic = self.topics[self.topic_input.currentIndex()]
+
+        return topic, {
+            "attempted": self.attempted_input.value(),
+            "correct": self.correct_input.value(),
+            "confidence": self.confidence_input.value(),
+        }
+
+
 class RevisionApp(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -577,9 +656,16 @@ class RevisionApp(QMainWindow):
         delete_button = QPushButton("Delete selected")
         delete_button.setObjectName("danger")
         delete_button.clicked.connect(self.delete_topic)
+        log_button = QPushButton("Log revision")
+        log_button.setObjectName("primary")
+        log_button.clicked.connect(self.log_session)
 
         toolbar.addWidget(delete_button)
         toolbar.addWidget(add_button)
+        toolbar.addWidget(log_button)
+        toolbar.addWidget(delete_button)
+        toolbar.addWidget(add_button)
+
 
         layout.addLayout(toolbar)
 
@@ -779,6 +865,49 @@ class RevisionApp(QMainWindow):
                     "Could Not Delete Topic",
                     f"Something went wrong:\n{error}",
                 )
+
+    
+    def log_session(self):
+        if not self.topics:
+            QMessageBox.information(
+                self,
+                "No topics available",
+                "Create a topic before logging a revision session.",
+            )
+            return
+
+        dialog = SessionDialog(self.topics, self)
+
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+
+        topic, data = dialog.get_session_data()
+
+        try:
+            topic.record_session(
+                data["attempted"],
+                data["correct"],
+                data["confidence"],
+            )
+
+            session = topic.sessions[-1]
+            self.database.add_session(topic, session)
+
+            self.refresh_ui()
+
+            QMessageBox.information(
+                self,
+                "Session saved",
+                f"Revision session saved for {topic.name}.",
+            )
+
+        except (ValueError, sqlite3.Error) as error:
+            QMessageBox.warning(
+                self,
+                "Could not save session",
+                str(error),
+            )
+
 
     def refresh_ui(self):
         total_topics = len(self.topics)
